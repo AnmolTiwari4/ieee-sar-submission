@@ -1,0 +1,129 @@
+#VRML_SIM R2025a utf8
+# license: Copyright Cyberbotics Ltd. Licensed for use only with Webots.
+# license url: https://cyberbotics.com/webots_assets_license
+# Skin node representing a human with predefined mesh and appearance.
+# template language: javascript
+
+PROTO Victim [
+  field SFVec3f                                           translation 0 0 0
+  field SFRotation                                        rotation    0 0 1 1.5708
+  field SFVec3f                                           scale       1 1 1
+  field SFString                                          name        "man"
+  field SFString                                          model       "man"
+  field SFBool                                            castShadows FALSE
+]
+{
+  %< const character = fields.model.value.toLowerCase().split('_')[0]; >%
+  %< const character_mesh = fields.model.value.toLowerCase(); >%
+  %< const marker_offsets = {
+    "man_1": "0 -0.4 0",
+    "man_2": "0 -1.3 0",
+    "man_3": "0 1.3 0",
+    "boy_1": "0 -0.2 0",
+    "boy_2": "0 0.7 0",
+    "boy_3": "0 -0.2 0",
+    "woman_1": "0 0.9 0",
+    "woman_2": "0.2 0.7 0",
+    "woman_3": "0 -0.3 0",
+    "girl_1": "0 0.7 0",
+    "girl_2": "-0.1 0.4 0",
+    "girl_3": "0 -0.2 0",
+  }; >%
+  %< const marker_offset = marker_offsets[character_mesh] || "-1 0 0"; >%
+
+  Robot {
+    translation IS translation
+    rotation IS rotation
+    name IS name
+    # Keep victims static but collidable against robot physics bodies.
+    boundingObject Shape {
+      geometry Mesh {
+        url [
+          %<= '"' + "meshes/" + character_mesh + '.stl"' >%
+        ]
+      }
+      castShadows FALSE
+    }
+    physics NULL
+    children [
+      Skin {
+        scale IS scale
+        modelUrl %<= '"' + "skins/" + character_mesh + '.fbx"' >%
+        appearance [
+          PBRAppearance {
+            baseColorMap ImageTexture {
+              url [
+                %<= '"' + "textures/" + character + '_skin.jpg"' >%
+              ]
+            }
+            roughness 1
+            metalness 0
+            name "skin"
+          }
+          PBRAppearance {
+            baseColorMap ImageTexture {
+              url [
+                %<= '"' + "textures/" + character + '_eyes.jpg"' >%
+              ]
+            }
+            roughness 1
+            metalness 0
+            name "eyes"
+          }
+          PBRAppearance {
+            baseColorMap ImageTexture {
+              url [
+                %<= '"' + "textures/" + character + '_eyebrow.png"' >%
+              ]
+            }
+            roughness 1
+            metalness 0
+            name "eyebrow"
+          }
+          PBRAppearance {
+            baseColorMap ImageTexture {
+              url [
+                %<= '"' + "textures/" + character + '_hair.png"' >%
+              ]
+            }
+            roughness 1
+            metalness 0
+            name "hair"
+          }
+          PBRAppearance {
+            baseColorMap ImageTexture {
+              url [
+                %<= '"' + "textures/" + character + '_shoes.jpg"' >%
+              ]
+            }
+            roughness 1
+            metalness 0
+            name "shoes"
+          }
+          PBRAppearance {
+            baseColorMap ImageTexture {
+              url [
+                %<= '"' + "textures/" + character + '_suit.jpg"' >%
+              ]
+            }
+            roughness 1
+            metalness 0
+            name "suit"
+          }
+        ]
+        castShadows IS castShadows
+      }
+      DEF VICTIM_MARKER Solid {
+        translation %<= marker_offset >%
+        #children [
+        #  Shape {
+        #    geometry Box {
+        #      size 0.1 0.1 0.1
+        #    }
+        #  }
+        #]
+        physics NULL
+      }
+    ]
+  }
+}

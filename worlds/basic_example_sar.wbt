@@ -1,0 +1,302 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/Floor.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Parquetry.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/lights/protos/CeilingSpotLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/lights/protos/CeilingLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/apartment_structure/protos/Wall.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/Roughcast.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/apartment_structure/protos/Window.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/appearances/protos/MattePaint.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/apartment_structure/protos/Door.proto"
+EXTERNPROTO "../protos/Rosbot.proto"
+EXTERNPROTO "../protos/OriginMarker.proto"
+EXTERNPROTO "../protos/Victim.proto"
+
+WorldInfo {
+  info [
+    "A basic search and rescue example world"
+  ]
+  title "Basic SAR example"
+  basicTimeStep 16
+  FPS 30
+}
+Viewpoint {
+  orientation -0.5754161189814868 0.5754161353340281 0.5811992439891287 2.088636151886481
+  position 2.0429663642915097 1.2755482093401707 31.94047705430872
+  exposure 0.5
+  ambientOcclusionRadius 1
+}
+TexturedBackground {
+  texture "entrance_hall"
+  luminosity 0.5
+  skybox FALSE
+}
+TexturedBackgroundLight {
+  texture "entrance_hall"
+}
+Floor {
+  translation 0.243 0.93 0
+  rotation 0 0 1 1.5708
+  size 7.7 12.86
+  appearance Parquetry {
+    type "light strip"
+    textureTransform TextureTransform {
+      rotation 1.57
+      scale 0.4 0.4
+    }
+  }
+}
+CeilingSpotLight {
+  translation -1.82 -2.27 2
+  name "ceiling spot light"
+  spotLightColor 0.913725 0.72549 0.431373
+  spotLightIntensity 4
+}
+CeilingLight {
+  translation 4.78 -0.87 2.5
+  bulbColor 0.913725 0.72549 0.431373
+  supportColor 0.533333 0.541176 0.521569
+  pointLightColor 0.913725 0.72549 0.431373
+  pointLightIntensity 3
+}
+CeilingLight {
+  translation 4.78 2.74 2.5
+  name "ceiling light(5)"
+  bulbColor 0.913725 0.72549 0.431373
+  supportColor 0.533333 0.541176 0.521569
+  pointLightColor 0.913725 0.72549 0.431373
+  pointLightIntensity 3
+}
+CeilingLight {
+  translation 0.31 -0.87 2.5
+  name "ceiling light(1)"
+  bulbColor 0.913725 0.72549 0.431373
+  supportColor 0.533333 0.541176 0.521569
+  pointLightColor 0.913725 0.72549 0.431373
+  pointLightIntensity 3
+}
+CeilingLight {
+  translation 0.31 2.74 2.5
+  name "ceiling light(4)"
+  bulbColor 0.913725 0.72549 0.431373
+  supportColor 0.533333 0.541176 0.521569
+  pointLightColor 0.913725 0.72549 0.431373
+  pointLightIntensity 3
+}
+CeilingLight {
+  translation -3.52 -0.87 2.5
+  name "ceiling light(2)"
+  bulbColor 0.913725 0.72549 0.431373
+  supportColor 0.533333 0.541176 0.521569
+  pointLightColor 0.913725 0.72549 0.431373
+  pointLightIntensity 3
+}
+CeilingLight {
+  translation -3.52 2.74 2.5
+  name "ceiling light(3)"
+  bulbColor 0.913725 0.72549 0.431373
+  supportColor 0.533333 0.541176 0.521569
+  pointLightColor 0.913725 0.72549 0.431373
+  pointLightIntensity 3
+}
+Wall {
+  translation -6.17 0.95 0
+  name "wall(A)"
+  size 0.2 7.9 2.5
+  appearance DEF SIDE_WALLS Roughcast {
+    textureTransform TextureTransform {
+      scale 3 3
+    }
+  }
+}
+Wall {
+  translation -5.94 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(B)1"
+  size 0.2 0.4 2.5
+  appearance DEF INTER_WALLS Roughcast {
+    textureTransform TextureTransform {
+      scale 0.3 2.2
+    }
+  }
+}
+Window {
+  translation -5.19 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)2"
+  size 0.2 1.1 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance DEF WINDOWS_WOOD MattePaint {
+    baseColor 0.133333 0.0666667 0
+  }
+}
+Window {
+  translation -3.84 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)3"
+  size 0.2 1.6 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Wall {
+  translation -2.84 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(B)4"
+  size 0.2 0.4 2.5
+  appearance USE INTER_WALLS
+}
+Window {
+  translation -2.09 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)5"
+  size 0.2 1.1 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Window {
+  translation -0.74 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)6"
+  size 0.2 1.6 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Wall {
+  translation 0.26 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(B)7"
+  size 0.2 0.4 2.5
+  appearance USE INTER_WALLS
+}
+Window {
+  translation 1 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)8"
+  size 0.2 1.1 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Window {
+  translation 2.35 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)9"
+  size 0.2 1.6 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Wall {
+  translation 3.35 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(B)10"
+  size 0.2 0.4 2.5
+  appearance USE INTER_WALLS
+}
+Window {
+  translation 4.1 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)11"
+  size 0.2 1.1 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Window {
+  translation 5.45 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "window(B)12"
+  size 0.2 1.6 2.5
+  bottomWallHeight 1
+  frameSize 0.02 0.05 0.02
+  windowSillSize 0.3 0.05
+  frameAppearance USE WINDOWS_WOOD
+}
+Wall {
+  translation 6.45 -2.9 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(B)13"
+  size 0.2 0.4 2.5
+  appearance USE INTER_WALLS
+}
+Wall {
+  translation 6.68 0.95 0
+  name "wall(C)"
+  size 0.2 7.9 2.5
+  appearance USE SIDE_WALLS
+}
+Wall {
+  translation 3.6 4.8 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(D)1"
+  size 0.2 6.2 2.5
+}
+Door {
+  translation 0 4.8 0
+  rotation 0 0 -1 1.5708
+  size 0.2 1 2.5
+  frameSize 0.01 0.05 0.05
+  frameAppearance MattePaint {
+    baseColor 0.133333 0.0666667 0
+  }
+}
+Wall {
+  translation -3.35 4.8 0
+  rotation 0 0 1 -1.5708003061004252
+  name "wall(D)2"
+  size 0.2 5.7 2.5
+}
+Robot {
+  children [
+    Receiver {
+      channel 43
+      allowedChannels [
+        43
+      ]
+    }
+  ]
+  name "sar_marking_supervisor"
+  controller "sar_marking_supervisor"
+  supervisor TRUE
+}
+Victim {
+  translation 5.53 4.53 0
+  rotation 0 0 -1 0
+  name "victim1"
+  model "man_1"
+}
+Victim {
+  translation -5.88901 -1.6474 0
+  rotation 0 0 -1 -1.5708
+  name "victim2"
+  model "woman_3"
+}
+OriginMarker {
+  translation 1 1 0.002
+  children [
+    Rosbot {
+      translation -0.375 0.375 0
+      name "robot1"
+      controller "simple_rosbot_sar"
+    }
+    Rosbot {
+      translation -0.375 0 0
+      name "robot2"
+      controller "simple_rosbot_sar"
+    }
+  ]
+}
