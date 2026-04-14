@@ -1,6 +1,6 @@
 # IEEE SMCS Search and Rescue Competition 2026 Edition: Phase 1
 
-This is the official repository for Phase 1 of the 2026 IEEE Systems, Man, and Cybernetics Society (SMCS) Search and Rescue (SAR) Competition. In Phase 1, teams will develop search and rescue strategies to coordinate a fleet of mobile robots searching for victims in simulation environments. The top six scoring teams will progress to Phase 2 of the competition, focusing on implementation in real robots. **Registration for Phase 1 is [now open](https://www.ieeesmc.org/2026-sar-competition/registration/).**
+This is the official repository for Phase 1 of the 2026 IEEE Systems, Man, and Cybernetics Society (SMCS) Search and Rescue (SAR) Competition. In Phase 1, teams will develop search and rescue strategies to coordinate a fleet of mobile robots searching for victims in simulation environments. The top scoring teams (up to six) will progress to Phase 2 of the competition, focusing on implementation in real robots. **Registration for Phase 1 is [now open](https://www.ieeesmc.org/2026-sar-competition/registration/).**
 
 **Contents:**
 
@@ -342,7 +342,7 @@ During development you will be marked using an automated script hosted on a remo
 3. **Coordination (15%)**: This score measures efficient distribution of labour between the pair of ground robots. Higher marks are awarded when robots find an even number of victims.
 4. **Video Information Extraction (30%)**: This score is the average of victim location estimate accuracy (how well submitted victim coordinates match ground truth positions, including estimate-count consistency), and map estimate accuracy (agreement between your submitted wall map and the generated ground-truth wall map). Always check the `INPUT VALIDATION WARNINGS` section of the [marking report](#example-report) for information on how to improve this score.    
 
-Once the development phase finishes, you will need to submit your code and solution as explained in the next section. The top six teams of Phase 1 will be selected through a combination of automated evaluation on unseen disaster worlds and marks awarded by a panel of human judges. You will also need to prepare an online presentation to explain your proposed solutions for flyover video information extraction, mission planning and ground robot fleet control and coordination.
+Once the development phase finishes, you will need to submit your code and solution as explained in the next section. The top teams of Phase 1 will be selected through a combination of automated evaluation on unseen disaster worlds and marks awarded by a panel of human judges. You will also need to prepare an online presentation to explain your proposed solutions for flyover video information extraction, mission planning and ground robot fleet control and coordination.
 
 # Submission Guidelines
 
