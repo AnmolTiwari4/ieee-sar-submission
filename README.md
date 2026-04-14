@@ -37,7 +37,7 @@ The simulation environments to be used during Phase 1 are developed in Webots, a
 
 ```bash
 git lfs install
-git clone https://gitlab.com/cax-engineering/2026-ieee-smcs-competition-phase-1.git
+git clone https://github.com/IEEE-SMCS/2026-ieee-smcs-competition-phase-1
 ```
 
 4. Create a virtual python development environment. By default, Webots uses the system's Python installation.
