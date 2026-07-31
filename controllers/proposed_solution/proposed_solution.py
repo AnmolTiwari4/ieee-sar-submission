@@ -87,7 +87,7 @@ def report_victim(estimated_x, estimated_y, confidence=0.95):
         f.write(f"{rosbot.getTime()},{robot_id},{estimated_x},{estimated_y},{confidence}\n")
 
 # =========================================================================
-# 3. GLOBAL MAP & STATE VARIABLES
+# 3. GLOBAL MAP & SCALING VARIABLES
 # =========================================================================
 try:
     global_map = cv2.imread('sim_logs/map_estimate.png', cv2.IMREAD_GRAYSCALE)
@@ -97,6 +97,11 @@ try:
 except:
     print(f"[{robot_id}] WARNING: Map not found. Defaulting to blank grid.")
     global_map = np.ones((600, 600), dtype=np.uint8) * 255
+
+# --- THE SCALE PATCH ---
+# Change this number if the judges use the medium (20.0) or large (40.0) maps
+ARENA_SIZE = 10.0 
+GRID_SIZE = 60
 
 current_x = -0.375
 current_y = 0.375 if robot_id == "robot1" else 0.0
@@ -157,23 +162,26 @@ def detect_victim():
                     return True
     return False
 
+def world_to_grid(wx, wy):
+    """Dynamic translation using ARENA_SIZE instead of hardcoded 10.0"""
+    offset = ARENA_SIZE / 2.0
+    gx = int(np.clip((wx + offset) / ARENA_SIZE * GRID_SIZE, 0, GRID_SIZE - 1))
+    gy = int(np.clip((offset - wy) / ARENA_SIZE * GRID_SIZE, 0, GRID_SIZE - 1))
+    return (gx, gy)
+
+def grid_to_world(gx, gy):
+    """Dynamic translation using ARENA_SIZE instead of hardcoded 10.0"""
+    offset = ARENA_SIZE / 2.0
+    wx = (gx / float(GRID_SIZE)) * ARENA_SIZE - offset
+    wy = offset - (gy / float(GRID_SIZE)) * ARENA_SIZE
+    return (wx, wy)
+
 def a_star_pathfind(start_world, target_world):
-    GRID_SIZE = 60
     small_map = cv2.resize(global_map, (GRID_SIZE, GRID_SIZE))
     kernel = np.ones((3, 3), np.uint8)
     inflated_map = cv2.erode(small_map, kernel)
     obstacle_grid = inflated_map < 127
     
-    def world_to_grid(wx, wy):
-        gx = int(np.clip((wx + 5.0) / 10.0 * GRID_SIZE, 0, GRID_SIZE - 1))
-        gy = int(np.clip((5.0 - wy) / 10.0 * GRID_SIZE, 0, GRID_SIZE - 1))
-        return (gx, gy)
-
-    def grid_to_world(gx, gy):
-        wx = (gx / float(GRID_SIZE)) * 10.0 - 5.0
-        wy = 5.0 - (gy / float(GRID_SIZE)) * 10.0
-        return (wx, wy)
-
     start = world_to_grid(start_world[0], start_world[1])
     goal = world_to_grid(target_world[0], target_world[1])
     
@@ -211,7 +219,6 @@ def a_star_pathfind(start_world, target_world):
 
 def generate_safe_waypoints(map_array, num_points=4):
     """Automatically scans the map for open floor space and generates safe coordinates."""
-    GRID_SIZE = 60
     small_map = cv2.resize(map_array, (GRID_SIZE, GRID_SIZE))
     
     # A thick kernel ensures we pick targets FAR away from the walls
@@ -228,8 +235,8 @@ def generate_safe_waypoints(map_array, num_points=4):
         
         for idx in indices[:num_points]:
             gx, gy = safe_x[idx], safe_y[idx]
-            wx = (gx / float(GRID_SIZE)) * 10.0 - 5.0
-            wy = 5.0 - (gy / float(GRID_SIZE)) * 10.0
+            # Use dynamic translation
+            wx, wy = grid_to_world(gx, gy)
             waypoints.append((wx, wy))
     else:
         waypoints = [(0.0, 0.0)]
