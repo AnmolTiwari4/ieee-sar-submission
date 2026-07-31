@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import math
 import heapq
+import os
+import random
 from steering_pid import PIDSteeringController
 
 # Initialize your steering engine right after setup
@@ -15,6 +17,10 @@ steering_engine = PIDSteeringController(kp=3.0, max_speed=6.0)
 rosbot = Robot()
 timestep = int(rosbot.getBasicTimeStep())
 robot_id = rosbot.getName()
+
+# Seed the random number generator using the robot's name 
+# This guarantees robot1 and robot2 pick completely different search routes!
+random.seed(robot_id)
 
 # --- Motors ---
 motors = {
@@ -48,13 +54,14 @@ for encoder in encoders.values():
     encoder.enable(timestep)
 
 # =========================================================================
-# 2. HACKATHON COMMUNICATIONS PIPELINE
+# 2. HACKATHON COMMUNICATIONS & LOGGING PIPELINE
 # =========================================================================
 supervisor_emitter = rosbot.getDevice("supervisor emitter")
 supervisor_emitter.setChannel(43)
 
 def report_victim(estimated_x, estimated_y, confidence=0.95):
-    """Sends the official JSON payload to score points on Channel 43."""
+    """Sends JSON payload on Channel 43 AND writes to local CSV log."""
+    # 1. Official JSON Payload to Supervisor
     message_dict = {
         "timestamp": rosbot.getTime(),
         "robot_id": robot_id,
@@ -64,15 +71,20 @@ def report_victim(estimated_x, estimated_y, confidence=0.95):
     }
     supervisor_emitter.send(json.dumps(message_dict).encode('utf-8'))
     print(f"[{robot_id}] VICTIM REPORTED TO JUDGES AT ({estimated_x:.2f}, {estimated_y:.2f})")
-
-squad_receiver = rosbot.getDevice("robot to robot receiver")
-squad_receiver.enable(timestep)
-squad_emitter = rosbot.getDevice("robot to robot emitter")
-
-def broadcast_target(target_x, target_y):
-    """Tells the teammate robot which grid coordinate we are claiming."""
-    message = {"robot_id": robot_id, "action": "claiming_target", "target": [target_x, target_y]}
-    squad_emitter.send(json.dumps(message).encode('utf-8'))
+    
+    # 2. Automated CSV Logging Deliverable
+    log_dir = 'sim_logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    csv_file = os.path.join(log_dir, 'victim_location_estimates.csv')
+    
+    if not os.path.isfile(csv_file):
+        with open(csv_file, 'w') as f:
+            f.write("Timestamp,Robot_ID,Estimated_X,Estimated_Y,Confidence\n")
+            
+    with open(csv_file, 'a') as f:
+        f.write(f"{rosbot.getTime()},{robot_id},{estimated_x},{estimated_y},{confidence}\n")
 
 # =========================================================================
 # 3. GLOBAL MAP & STATE VARIABLES
@@ -86,22 +98,19 @@ except:
     print(f"[{robot_id}] WARNING: Map not found. Defaulting to blank grid.")
     global_map = np.ones((600, 600), dtype=np.uint8) * 255
 
-# Robot State
 current_x = -0.375
 current_y = 0.375 if robot_id == "robot1" else 0.0
 current_heading = 0.0
 last_encoder_values = {"fl": 0.0, "fr": 0.0}
 
-# Constants for ROSbot
 WHEEL_RADIUS = 0.0425
 WHEEL_BASE = 0.192
 
 # =========================================================================
-# 4. LOGIC ENGINES
+# 4. LOGIC ENGINES (Odometry, Vision, Pathfinding)
 # =========================================================================
 
 def update_odometry():
-    """Calculates position using dead reckoning (Encoders + Compass)."""
     global current_x, current_y, current_heading, last_encoder_values
     
     fl_val = encoders["fl"].getValue()
@@ -122,7 +131,6 @@ def update_odometry():
     current_y += dist_center * math.sin(current_heading)
 
 def detect_victim():
-    """Uses OpenCV HSV masking, contour geometry, and LiDAR depth to confirm a victim."""
     raw_img = camera.getImage()
     if not raw_img: 
         return False
@@ -135,34 +143,23 @@ def detect_victim():
     upper_color = np.array([25, 255, 255])
     
     mask = cv2.inRange(hsv_frame, lower_color, upper_color)
-    
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     for contour in contours:
         area = cv2.contourArea(contour)
-        
         if area > 1200: 
             x, y, w, h = cv2.boundingRect(contour)
             aspect_ratio = float(w) / h
-            
             if 0.2 < aspect_ratio < 1.5:
                 depth_data = lidar.getRangeImage()
                 center_depth = depth_data[len(depth_data) // 2]
-                
                 if center_depth < 1.0:
                     return True
-            
     return False
 
 def a_star_pathfind(start_world, target_world):
-    """
-    Production A* Algorithm. 
-    Downsamples the map, inflates walls, and translates Webots meters to matrix indices.
-    """
     GRID_SIZE = 60
-    
     small_map = cv2.resize(global_map, (GRID_SIZE, GRID_SIZE))
-    
     kernel = np.ones((3, 3), np.uint8)
     inflated_map = cv2.erode(small_map, kernel)
     obstacle_grid = inflated_map < 127
@@ -184,12 +181,10 @@ def a_star_pathfind(start_world, target_world):
     heapq.heappush(open_set, (0, start))
     came_from = {}
     g_score = {start: 0}
-
     neighbors = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)]
 
     while open_set:
         _, current = heapq.heappop(open_set)
-        
         if current == goal:
             path = []
             while current in came_from:
@@ -200,23 +195,46 @@ def a_star_pathfind(start_world, target_world):
 
         for dx, dy in neighbors:
             nx, ny = current[0] + dx, current[1] + dy
-            
             if 0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE:
-                if obstacle_grid[ny, nx]:
-                    continue
+                if obstacle_grid[ny, nx]: continue
                 
                 tentative_g = g_score[current] + math.hypot(dx, dy)
                 neighbor = (nx, ny)
-                
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
-                    
                     h = math.hypot(goal[0] - nx, goal[1] - ny)
                     heapq.heappush(open_set, (tentative_g + h, neighbor))
 
     print(f"[{robot_id}] WARNING: A* found no valid path. Proceeding blind.")
     return [target_world]
+
+def generate_safe_waypoints(map_array, num_points=4):
+    """Automatically scans the map for open floor space and generates safe coordinates."""
+    GRID_SIZE = 60
+    small_map = cv2.resize(map_array, (GRID_SIZE, GRID_SIZE))
+    
+    # A thick kernel ensures we pick targets FAR away from the walls
+    kernel = np.ones((5, 5), np.uint8) 
+    inflated_map = cv2.erode(small_map, kernel)
+    
+    # Find all Y, X indices of safe, open floor pixels
+    safe_y, safe_x = np.where(inflated_map > 127)
+    
+    waypoints = []
+    if len(safe_x) > 0:
+        indices = list(range(len(safe_x)))
+        random.shuffle(indices) # Seeded by robot_id above!
+        
+        for idx in indices[:num_points]:
+            gx, gy = safe_x[idx], safe_y[idx]
+            wx = (gx / float(GRID_SIZE)) * 10.0 - 5.0
+            wy = 5.0 - (gy / float(GRID_SIZE)) * 10.0
+            waypoints.append((wx, wy))
+    else:
+        waypoints = [(0.0, 0.0)]
+        
+    return waypoints
 
 # =========================================================================
 # 5. MAIN AUTONOMY LOOP
@@ -224,17 +242,9 @@ def a_star_pathfind(start_world, target_world):
 
 print(f"[{robot_id}] Systems green. Engaging autonomous search.")
 
-# UPGRADE 2: Define separate sweep patterns so they don't crash into each other
-if robot_id == "robot1":
-    search_waypoints = [
-        (0.5, 0.5),    # robot1 takes the left side
-        (1.5, -1.0)
-    ]
-else:
-    search_waypoints = [
-        (3.0, -2.0),   # robot2 takes the right side
-        (2.5, 1.5)
-    ]
+# Auto-generate unique, map-safe sweep patterns for each robot
+search_waypoints = generate_safe_waypoints(global_map, num_points=6)
+print(f"[{robot_id}] Generated Safe Sweep Targets: {search_waypoints}")
 
 # Pop the first target and calculate the initial path
 current_target = search_waypoints.pop(0)
@@ -244,36 +254,31 @@ while rosbot.step(timestep) != -1:
     
     update_odometry()
     
-    # ---------------------------------------------------------
-    # WAYPOINT QUEUE LOGIC
-    # ---------------------------------------------------------
+    # --- WAYPOINT QUEUE LOGIC ---
     distance_to_target = math.hypot(current_target[0] - current_x, current_target[1] - current_y)
 
     if distance_to_target < 0.2:
         if len(search_waypoints) > 0:
             current_target = search_waypoints.pop(0)
-            print(f"[{robot_id}] Waypoint reached. Calculating path to next zone: {current_target}")
+            print(f"[{robot_id}] Target reached. Rerouting to: {current_target}")
             current_path = a_star_pathfind((current_x, current_y), current_target)
         else:
-            print(f"[{robot_id}] Search pattern complete. Holding position.")
+            print(f"[{robot_id}] Sector sweep complete. Holding position.")
             for motor in motors.values():
                 motor.setVelocity(0.0)
             continue 
     
-    # ---------------------------------------------------------
-    # VICTIM DETECTION & STEERING
-    # ---------------------------------------------------------
+    # --- VICTIM DETECTION ---
     if detect_victim():
         for motor in motors.values(): 
             motor.setVelocity(0.0)
         report_victim(current_x, current_y)
     
-    # Pass your current position, heading, and path into your separate steering file
+    # --- PID STEERING ---
     left_speed, right_speed = steering_engine.calculate_speeds(
         current_x, current_y, current_heading, current_path
     )
     
-    # Apply the calculated speeds to the physical motors
     motors["fl"].setVelocity(left_speed)
     motors["rl"].setVelocity(left_speed)
     motors["fr"].setVelocity(right_speed)
