@@ -168,7 +168,7 @@ pip install -r requirements.txt
 Run the preprocessing script before launching the simulation.
 
 ```bash
-python controllers/proposed_solution/map_generator.py
+python map_generator.py
 ```
 
 This generates:
