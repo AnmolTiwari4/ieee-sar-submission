@@ -87,7 +87,7 @@ except:
     global_map = np.ones((600, 600), dtype=np.uint8) * 255
 
 # Robot State
-current_x = -0.375 if robot_id == "robot1" else -0.375
+current_x = -0.375
 current_y = 0.375 if robot_id == "robot1" else 0.0
 current_heading = 0.0
 last_encoder_values = {"fl": 0.0, "fr": 0.0}
@@ -97,7 +97,7 @@ WHEEL_RADIUS = 0.0425
 WHEEL_BASE = 0.192
 
 # =========================================================================
-# 4. ANMOL'S LOGIC ENGINES
+# 4. LOGIC ENGINES
 # =========================================================================
 
 def update_odometry():
@@ -136,20 +136,16 @@ def detect_victim():
     
     mask = cv2.inRange(hsv_frame, lower_color, upper_color)
     
-    # UPGRADE 1: Find structural contours instead of just counting pixels
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     for contour in contours:
         area = cv2.contourArea(contour)
         
-        # Only trigger if the object is large enough
         if area > 1200: 
             x, y, w, h = cv2.boundingRect(contour)
             aspect_ratio = float(w) / h
             
-            # Check if it is shaped like a standing/sitting person
             if 0.2 < aspect_ratio < 1.5:
-                # Confirm physical proximity with LiDAR
                 depth_data = lidar.getRangeImage()
                 center_depth = depth_data[len(depth_data) // 2]
                 
@@ -165,7 +161,6 @@ def a_star_pathfind(start_world, target_world):
     """
     GRID_SIZE = 60
     
-    # 1. Downsample and Inflate Obstacles
     small_map = cv2.resize(global_map, (GRID_SIZE, GRID_SIZE))
     
     kernel = np.ones((3, 3), np.uint8)
@@ -229,13 +224,17 @@ def a_star_pathfind(start_world, target_world):
 
 print(f"[{robot_id}] Systems green. Engaging autonomous search.")
 
-# UPGRADE 2: Define our search sweep pattern
-search_waypoints = [
-    (0.5, 0.5),    # First room
-    (1.5, -1.0),   # Hallway intersection
-    (2.5, 1.5),    # Top right room
-    (3.0, -2.0)    # Bottom right room
-]
+# UPGRADE 2: Define separate sweep patterns so they don't crash into each other
+if robot_id == "robot1":
+    search_waypoints = [
+        (0.5, 0.5),    # robot1 takes the left side
+        (1.5, -1.0)
+    ]
+else:
+    search_waypoints = [
+        (3.0, -2.0),   # robot2 takes the right side
+        (2.5, 1.5)
+    ]
 
 # Pop the first target and calculate the initial path
 current_target = search_waypoints.pop(0)
@@ -259,7 +258,7 @@ while rosbot.step(timestep) != -1:
             print(f"[{robot_id}] Search pattern complete. Holding position.")
             for motor in motors.values():
                 motor.setVelocity(0.0)
-            continue # Skip the steering calculation if we are done
+            continue 
     
     # ---------------------------------------------------------
     # VICTIM DETECTION & STEERING
