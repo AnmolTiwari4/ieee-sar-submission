@@ -122,7 +122,7 @@ def update_odometry():
     current_y += dist_center * math.sin(current_heading)
 
 def detect_victim():
-    """Uses OpenCV HSV masking and LiDAR depth to confirm a victim."""
+    """Uses OpenCV HSV masking, contour geometry, and LiDAR depth to confirm a victim."""
     raw_img = camera.getImage()
     if not raw_img: 
         return False
@@ -131,18 +131,30 @@ def detect_victim():
     frame_bgr = img_array[:, :, :3]
     hsv_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
     
-    # TODO: Tune HSV values to match the victim in Webots
     lower_color = np.array([5, 120, 120])
     upper_color = np.array([25, 255, 255])
     
     mask = cv2.inRange(hsv_frame, lower_color, upper_color)
     
-    if cv2.countNonZero(mask) > 1500: 
-        depth_data = lidar.getRangeImage()
-        center_depth = depth_data[len(depth_data) // 2]
+    # UPGRADE 1: Find structural contours instead of just counting pixels
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for contour in contours:
+        area = cv2.contourArea(contour)
         
-        if center_depth < 1.0:
-            return True
+        # Only trigger if the object is large enough
+        if area > 1200: 
+            x, y, w, h = cv2.boundingRect(contour)
+            aspect_ratio = float(w) / h
+            
+            # Check if it is shaped like a standing/sitting person
+            if 0.2 < aspect_ratio < 1.5:
+                # Confirm physical proximity with LiDAR
+                depth_data = lidar.getRangeImage()
+                center_depth = depth_data[len(depth_data) // 2]
+                
+                if center_depth < 1.0:
+                    return True
             
     return False
 
@@ -156,12 +168,10 @@ def a_star_pathfind(start_world, target_world):
     # 1. Downsample and Inflate Obstacles
     small_map = cv2.resize(global_map, (GRID_SIZE, GRID_SIZE))
     
-    # Inflate the black walls so the robot's physical width doesn't clip them
     kernel = np.ones((3, 3), np.uint8)
     inflated_map = cv2.erode(small_map, kernel)
-    obstacle_grid = inflated_map < 127  # True = Wall
+    obstacle_grid = inflated_map < 127
     
-    # 2. Coordinate Translation Functions (Assuming standard 10x10m SAR arena)
     def world_to_grid(wx, wy):
         gx = int(np.clip((wx + 5.0) / 10.0 * GRID_SIZE, 0, GRID_SIZE - 1))
         gy = int(np.clip((5.0 - wy) / 10.0 * GRID_SIZE, 0, GRID_SIZE - 1))
@@ -175,21 +185,17 @@ def a_star_pathfind(start_world, target_world):
     start = world_to_grid(start_world[0], start_world[1])
     goal = world_to_grid(target_world[0], target_world[1])
     
-    # 3. A* Search Initialization
     open_set = []
     heapq.heappush(open_set, (0, start))
     came_from = {}
     g_score = {start: 0}
 
-    # 8-way movement logic
     neighbors = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)]
 
-    # 4. The Mathematical Search Loop
     while open_set:
         _, current = heapq.heappop(open_set)
         
         if current == goal:
-            # Target found: Mathematically trace back the parent nodes
             path = []
             while current in came_from:
                 path.append(grid_to_world(current[0], current[1]))
@@ -200,10 +206,9 @@ def a_star_pathfind(start_world, target_world):
         for dx, dy in neighbors:
             nx, ny = current[0] + dx, current[1] + dy
             
-            # Boundary and obstacle check
             if 0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE:
                 if obstacle_grid[ny, nx]:
-                    continue  # Discard if it hits an inflated wall
+                    continue
                 
                 tentative_g = g_score[current] + math.hypot(dx, dy)
                 neighbor = (nx, ny)
@@ -212,23 +217,53 @@ def a_star_pathfind(start_world, target_world):
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
                     
-                    # Heuristic: Straight-line Euclidean distance to the goal
                     h = math.hypot(goal[0] - nx, goal[1] - ny)
                     heapq.heappush(open_set, (tentative_g + h, neighbor))
 
-    # Failsafe if the target is physically trapped inside a wall
     print(f"[{robot_id}] WARNING: A* found no valid path. Proceeding blind.")
     return [target_world]
 
 # =========================================================================
 # 5. MAIN AUTONOMY LOOP
 # =========================================================================
+
 print(f"[{robot_id}] Systems green. Engaging autonomous search.")
+
+# UPGRADE 2: Define our search sweep pattern
+search_waypoints = [
+    (0.5, 0.5),    # First room
+    (1.5, -1.0),   # Hallway intersection
+    (2.5, 1.5),    # Top right room
+    (3.0, -2.0)    # Bottom right room
+]
+
+# Pop the first target and calculate the initial path
+current_target = search_waypoints.pop(0)
+current_path = a_star_pathfind((current_x, current_y), current_target)
 
 while rosbot.step(timestep) != -1:
     
     update_odometry()
     
+    # ---------------------------------------------------------
+    # WAYPOINT QUEUE LOGIC
+    # ---------------------------------------------------------
+    distance_to_target = math.hypot(current_target[0] - current_x, current_target[1] - current_y)
+
+    if distance_to_target < 0.2:
+        if len(search_waypoints) > 0:
+            current_target = search_waypoints.pop(0)
+            print(f"[{robot_id}] Waypoint reached. Calculating path to next zone: {current_target}")
+            current_path = a_star_pathfind((current_x, current_y), current_target)
+        else:
+            print(f"[{robot_id}] Search pattern complete. Holding position.")
+            for motor in motors.values():
+                motor.setVelocity(0.0)
+            continue # Skip the steering calculation if we are done
+    
+    # ---------------------------------------------------------
+    # VICTIM DETECTION & STEERING
+    # ---------------------------------------------------------
     if detect_victim():
         for motor in motors.values(): 
             motor.setVelocity(0.0)
