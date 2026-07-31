@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 import math
 import heapq
+from steering_pid import PIDSteeringController
+
+# Initialize your steering engine right after setup
+steering_engine = PIDSteeringController(kp=3.0, max_speed=6.0)
 
 # =========================================================================
 # 1. INITIALIZATION & HARDWARE SETUP
@@ -128,8 +132,8 @@ def detect_victim():
     hsv_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
     
     # TODO: Tune HSV values to match the victim in Webots
-    lower_color = np.array([5, 100, 100])
-    upper_color = np.array([15, 255, 255])
+    lower_color = np.array([5, 120, 120])
+    upper_color = np.array([25, 255, 255])
     
     mask = cv2.inRange(hsv_frame, lower_color, upper_color)
     
@@ -142,9 +146,79 @@ def detect_victim():
             
     return False
 
-def a_star_pathfind(start_node, target_node):
-    """Placeholder A* Algorithm for Anmol's grid navigation."""
-    pass
+def a_star_pathfind(start_world, target_world):
+    """
+    Production A* Algorithm. 
+    Downsamples the map, inflates walls, and translates Webots meters to matrix indices.
+    """
+    GRID_SIZE = 60
+    
+    # 1. Downsample and Inflate Obstacles
+    small_map = cv2.resize(global_map, (GRID_SIZE, GRID_SIZE))
+    
+    # Inflate the black walls so the robot's physical width doesn't clip them
+    kernel = np.ones((3, 3), np.uint8)
+    inflated_map = cv2.erode(small_map, kernel)
+    obstacle_grid = inflated_map < 127  # True = Wall
+    
+    # 2. Coordinate Translation Functions (Assuming standard 10x10m SAR arena)
+    def world_to_grid(wx, wy):
+        gx = int(np.clip((wx + 5.0) / 10.0 * GRID_SIZE, 0, GRID_SIZE - 1))
+        gy = int(np.clip((5.0 - wy) / 10.0 * GRID_SIZE, 0, GRID_SIZE - 1))
+        return (gx, gy)
+
+    def grid_to_world(gx, gy):
+        wx = (gx / float(GRID_SIZE)) * 10.0 - 5.0
+        wy = 5.0 - (gy / float(GRID_SIZE)) * 10.0
+        return (wx, wy)
+
+    start = world_to_grid(start_world[0], start_world[1])
+    goal = world_to_grid(target_world[0], target_world[1])
+    
+    # 3. A* Search Initialization
+    open_set = []
+    heapq.heappush(open_set, (0, start))
+    came_from = {}
+    g_score = {start: 0}
+
+    # 8-way movement logic
+    neighbors = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)]
+
+    # 4. The Mathematical Search Loop
+    while open_set:
+        _, current = heapq.heappop(open_set)
+        
+        if current == goal:
+            # Target found: Mathematically trace back the parent nodes
+            path = []
+            while current in came_from:
+                path.append(grid_to_world(current[0], current[1]))
+                current = came_from[current]
+            path.reverse()
+            return path
+
+        for dx, dy in neighbors:
+            nx, ny = current[0] + dx, current[1] + dy
+            
+            # Boundary and obstacle check
+            if 0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE:
+                if obstacle_grid[ny, nx]:
+                    continue  # Discard if it hits an inflated wall
+                
+                tentative_g = g_score[current] + math.hypot(dx, dy)
+                neighbor = (nx, ny)
+                
+                if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    
+                    # Heuristic: Straight-line Euclidean distance to the goal
+                    h = math.hypot(goal[0] - nx, goal[1] - ny)
+                    heapq.heappush(open_set, (tentative_g + h, neighbor))
+
+    # Failsafe if the target is physically trapped inside a wall
+    print(f"[{robot_id}] WARNING: A* found no valid path. Proceeding blind.")
+    return [target_world]
 
 # =========================================================================
 # 5. MAIN AUTONOMY LOOP
@@ -160,9 +234,12 @@ while rosbot.step(timestep) != -1:
             motor.setVelocity(0.0)
         report_victim(current_x, current_y)
     
-    left_speed = 2.0  
-    right_speed = 2.0
+    # Pass your current position, heading, and path into your separate steering file
+    left_speed, right_speed = steering_engine.calculate_speeds(
+        current_x, current_y, current_heading, current_path
+    )
     
+    # Apply the calculated speeds to the physical motors
     motors["fl"].setVelocity(left_speed)
     motors["rl"].setVelocity(left_speed)
     motors["fr"].setVelocity(right_speed)
