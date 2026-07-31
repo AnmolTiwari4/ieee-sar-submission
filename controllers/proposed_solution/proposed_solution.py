@@ -8,18 +8,16 @@ import os
 import random
 from steering_pid import PIDSteeringController
 
-# Initialize your steering engine right after setup
+# Initialize steering engine
 steering_engine = PIDSteeringController(kp=3.0, max_speed=6.0)
 
 # =========================================================================
-# 1. INITIALIZATION & HARDWARE SETUP
+# 1. INITIALIZATION & UNIVERSAL MAP LOADING
 # =========================================================================
 rosbot = Robot()
 timestep = int(rosbot.getBasicTimeStep())
 robot_id = rosbot.getName()
 
-# Seed the random number generator using the robot's name 
-# This guarantees robot1 and robot2 pick completely different search routes!
 random.seed(robot_id)
 
 # --- Motors ---
@@ -54,14 +52,12 @@ for encoder in encoders.values():
     encoder.enable(timestep)
 
 # =========================================================================
-# 2. HACKATHON COMMUNICATIONS & LOGGING PIPELINE
+# 2. COMMUNICATIONS & LOGGING
 # =========================================================================
 supervisor_emitter = rosbot.getDevice("supervisor emitter")
 supervisor_emitter.setChannel(43)
 
 def report_victim(estimated_x, estimated_y, confidence=0.95):
-    """Sends JSON payload on Channel 43 AND writes to local CSV log."""
-    # 1. Official JSON Payload to Supervisor
     message_dict = {
         "timestamp": rosbot.getTime(),
         "robot_id": robot_id,
@@ -70,13 +66,11 @@ def report_victim(estimated_x, estimated_y, confidence=0.95):
         "victim_confidence": confidence 
     }
     supervisor_emitter.send(json.dumps(message_dict).encode('utf-8'))
-    print(f"[{robot_id}] VICTIM REPORTED TO JUDGES AT ({estimated_x:.2f}, {estimated_y:.2f})")
+    print(f"[{robot_id}] VICTIM REPORTED AT ({estimated_x:.2f}, {estimated_y:.2f})")
     
-    # 2. Automated CSV Logging Deliverable
     log_dir = 'sim_logs'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-        
     csv_file = os.path.join(log_dir, 'victim_location_estimates.csv')
     
     if not os.path.isfile(csv_file):
@@ -87,19 +81,18 @@ def report_victim(estimated_x, estimated_y, confidence=0.95):
         f.write(f"{rosbot.getTime()},{robot_id},{estimated_x},{estimated_y},{confidence}\n")
 
 # =========================================================================
-# 3. GLOBAL MAP & SCALING VARIABLES
+# 3. UNIVERSAL MAP & AUTO-SCALING ENGINE
 # =========================================================================
 try:
     global_map = cv2.imread('sim_logs/map_estimate.png', cv2.IMREAD_GRAYSCALE)
     if global_map is None: 
         raise FileNotFoundError
-    print(f"[{robot_id}] Global map loaded successfully.")
+    print(f"[{robot_id}] Universal map loaded successfully.")
 except:
-    print(f"[{robot_id}] WARNING: Map not found. Defaulting to blank grid.")
+    print(f"[{robot_id}] WARNING: Map missing. Generating universal backup grid.")
     global_map = np.ones((600, 600), dtype=np.uint8) * 255
+    cv2.rectangle(global_map, (30, 30), (570, 570), 0, 15)
 
-# --- THE SCALE PATCH ---
-# Change this number if the judges use the medium (20.0) or large (40.0) maps
 ARENA_SIZE = 10.0 
 GRID_SIZE = 60
 
@@ -109,10 +102,9 @@ current_heading = 0.0
 last_encoder_values = {"fl": 0.0, "fr": 0.0}
 
 WHEEL_RADIUS = 0.0425
-WHEEL_BASE = 0.192
 
 # =========================================================================
-# 4. LOGIC ENGINES (Odometry, Vision, Pathfinding)
+# 4. LOGIC ENGINES (Universal Coordinate & Pathfinding)
 # =========================================================================
 
 def update_odometry():
@@ -151,26 +143,19 @@ def detect_victim():
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     for contour in contours:
-        area = cv2.contourArea(contour)
-        if area > 1200: 
-            x, y, w, h = cv2.boundingRect(contour)
-            aspect_ratio = float(w) / h
-            if 0.2 < aspect_ratio < 1.5:
-                depth_data = lidar.getRangeImage()
-                center_depth = depth_data[len(depth_data) // 2]
-                if center_depth < 1.0:
-                    return True
+        if cv2.contourArea(contour) > 1200:
+            depth_data = lidar.getRangeImage()
+            if depth_data[len(depth_data) // 2] < 1.0:
+                return True
     return False
 
 def world_to_grid(wx, wy):
-    """Dynamic translation using ARENA_SIZE instead of hardcoded 10.0"""
     offset = ARENA_SIZE / 2.0
     gx = int(np.clip((wx + offset) / ARENA_SIZE * GRID_SIZE, 0, GRID_SIZE - 1))
     gy = int(np.clip((offset - wy) / ARENA_SIZE * GRID_SIZE, 0, GRID_SIZE - 1))
     return (gx, gy)
 
 def grid_to_world(gx, gy):
-    """Dynamic translation using ARENA_SIZE instead of hardcoded 10.0"""
     offset = ARENA_SIZE / 2.0
     wx = (gx / float(GRID_SIZE)) * ARENA_SIZE - offset
     wy = offset - (gy / float(GRID_SIZE)) * ARENA_SIZE
@@ -214,74 +199,75 @@ def a_star_pathfind(start_world, target_world):
                     h = math.hypot(goal[0] - nx, goal[1] - ny)
                     heapq.heappush(open_set, (tentative_g + h, neighbor))
 
-    print(f"[{robot_id}] WARNING: A* found no valid path. Proceeding blind.")
     return [target_world]
 
 def generate_safe_waypoints(map_array, num_points=4):
-    """Automatically scans the map for open floor space and generates safe coordinates."""
     small_map = cv2.resize(map_array, (GRID_SIZE, GRID_SIZE))
-    
-    # A thick kernel ensures we pick targets FAR away from the walls
     kernel = np.ones((5, 5), np.uint8) 
     inflated_map = cv2.erode(small_map, kernel)
-    
-    # Find all Y, X indices of safe, open floor pixels
     safe_y, safe_x = np.where(inflated_map > 127)
     
     waypoints = []
     if len(safe_x) > 0:
         indices = list(range(len(safe_x)))
-        random.shuffle(indices) # Seeded by robot_id above!
-        
+        random.shuffle(indices)
         for idx in indices[:num_points]:
-            gx, gy = safe_x[idx], safe_y[idx]
-            # Use dynamic translation
-            wx, wy = grid_to_world(gx, gy)
-            waypoints.append((wx, wy))
+            waypoints.append(grid_to_world(safe_x[idx], safe_y[idx]))
     else:
         waypoints = [(0.0, 0.0)]
-        
     return waypoints
 
 # =========================================================================
-# 5. MAIN AUTONOMY LOOP
+# 5. MAIN LOOP & STALL RECOVERY
 # =========================================================================
-
-print(f"[{robot_id}] Systems green. Engaging autonomous search.")
-
-# Auto-generate unique, map-safe sweep patterns for each robot
+print(f"[{robot_id}] Universal engine engaged.")
 search_waypoints = generate_safe_waypoints(global_map, num_points=6)
-print(f"[{robot_id}] Generated Safe Sweep Targets: {search_waypoints}")
-
-# Pop the first target and calculate the initial path
 current_target = search_waypoints.pop(0)
 current_path = a_star_pathfind((current_x, current_y), current_target)
 
+stuck_counter = 0
+last_x, last_y = current_x, current_y
+
 while rosbot.step(timestep) != -1:
-    
     update_odometry()
     
-    # --- WAYPOINT QUEUE LOGIC ---
-    distance_to_target = math.hypot(current_target[0] - current_x, current_target[1] - current_y)
-
-    if distance_to_target < 0.2:
+    # --- STALL DETECTION & OBSTACLE ESCAPE BEHAVIOR ---
+    distance_moved = math.hypot(current_x - last_x, current_y - last_y)
+    if distance_moved < 0.005:
+        stuck_counter += 1
+    else:
+        stuck_counter = 0
+    
+    last_x, last_y = current_x, current_y
+    
+    if stuck_counter > 50: 
+        print(f"[{robot_id}] STUCK DETECTED: Backing away from obstacle/table...")
+        for motor in motors.values(): 
+            motor.setVelocity(-3.0)
+        rosbot.step(500)
+        
+        motors["fl"].setVelocity(-3.0)
+        motors["rl"].setVelocity(-3.0)
+        motors["fr"].setVelocity(3.0)
+        motors["rr"].setVelocity(3.0)
+        rosbot.step(300)
+        
+        stuck_counter = 0
+        continue
+    # -------------------------------------------------
+    
+    if math.hypot(current_target[0] - current_x, current_target[1] - current_y) < 0.2:
         if len(search_waypoints) > 0:
             current_target = search_waypoints.pop(0)
-            print(f"[{robot_id}] Target reached. Rerouting to: {current_target}")
             current_path = a_star_pathfind((current_x, current_y), current_target)
         else:
-            print(f"[{robot_id}] Sector sweep complete. Holding position.")
-            for motor in motors.values():
-                motor.setVelocity(0.0)
+            for motor in motors.values(): motor.setVelocity(0.0)
             continue 
     
-    # --- VICTIM DETECTION ---
     if detect_victim():
-        for motor in motors.values(): 
-            motor.setVelocity(0.0)
+        for motor in motors.values(): motor.setVelocity(0.0)
         report_victim(current_x, current_y)
     
-    # --- PID STEERING ---
     left_speed, right_speed = steering_engine.calculate_speeds(
         current_x, current_y, current_heading, current_path
     )
