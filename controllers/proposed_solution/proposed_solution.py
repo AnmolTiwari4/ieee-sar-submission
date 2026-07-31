@@ -241,17 +241,25 @@ while rosbot.step(timestep) != -1:
     last_x, last_y = current_x, current_y
     
     if stuck_counter > 50: 
-        print(f"[{robot_id}] STUCK DETECTED: Backing away from obstacle/table...")
+        print(f"[{robot_id}] STUCK DETECTED: Backing away and rerouting...")
+        
+        # 1. Back up straight
         for motor in motors.values(): 
             motor.setVelocity(-3.0)
+        rosbot.step(400)
+        
+        # 2. Force a sharp spin to turn away from the obstacle/table
+        motors["fl"].setVelocity(-4.0)
+        motors["rl"].setVelocity(-4.0)
+        motors["fr"].setVelocity(4.0)
+        motors["rr"].setVelocity(4.0)
         rosbot.step(500)
         
-        motors["fl"].setVelocity(-3.0)
-        motors["rl"].setVelocity(-3.0)
-        motors["fr"].setVelocity(3.0)
-        motors["rr"].setVelocity(3.0)
-        rosbot.step(300)
-        
+        # 3. Drop the problematic waypoint and reroute
+        if len(search_waypoints) > 0:
+            current_target = search_waypoints.pop(0)
+            current_path = a_star_pathfind((current_x, current_y), current_target)
+            
         stuck_counter = 0
         continue
     # -------------------------------------------------
